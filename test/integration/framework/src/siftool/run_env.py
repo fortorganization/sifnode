@@ -810,7 +810,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         hardhat_log_file = open(os.path.join(log_dir, "hardhat.log"), "w")  # TODO close + use a different name
         sifnoded_log_file = open(os.path.join(log_dir, "sifnoded.log"), "w")  # TODO close
         relayer_log_file = open(os.path.join(log_dir, "relayer.log"), "w")  # TODO close
-        witness_log_file = open(os.path.join(log_dir, "witness.log"), "w")  # TODO close; will be empty on non-peggy2 branch
 
         self.cmd.rmdir(self.cmd.get_user_home(".sifnoded"))  # Purge test keyring backend
 
@@ -876,13 +875,17 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         log.debug("Validator 0 address: {}".format(sifnode_validators[0]["address"]))  # mint
 
         symbol_translator_file = os.path.join(self.test_integration_dir, "config", "symbol_translator.json")
-        [relayer0_exec_args], [witness0_exec_args] = \
+        [relayer0_exec_args], [witness_exec_args] = \
         self.start_witnesses_and_relayers(w3_websocket_address, hardhat_chain_id, tcp_url,
             chain_id, peggy_sc_addrs, hardhat_accounts["validators"], sifnode_validators, sifnode_relayers,
             sifnode_witnesses, symbol_translator_file)
 
         relayer0_proc = self.cmd.spawn_asynchronous_process(relayer0_exec_args, log_file=relayer_log_file)
-        witness0_proc = self.cmd.spawn_asynchronous_process(witness0_exec_args, log_file=witness_log_file)
+        witness_procs = []
+        for i, w in enumerate(witness_exec_args):
+            witness_log_file = open(os.path.join(log_dir, f"witness{i}.log"), "w")  # TODO close; will be empty on non-peggy2 branch
+            witness_proc = self.cmd.spawn_asynchronous_process(w, log_file=witness_log_file)
+            witness_procs.append(witness_proc)
 
         # In the future, we want to have one descriptor for entire environment.
         # It should be able to support multiple EVM and multiple Cosmos chains, including all neccessary bridges and
@@ -905,10 +908,10 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         self.write_env_files(self.project.project_dir(), self.project.go_bin_dir, peggy_sc_addrs, hardhat_accounts,
             admin_account_name, admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers,
             sifnode_witnesses, tcp_url, hardhat_bind_hostname, hardhat_port, hardhat_chain_id, chain_dir,
-            sifnoded_exec_args, relayer0_exec_args, witness0_exec_args
+            sifnoded_exec_args, relayer0_exec_args, witness_exec_args
         )
 
-        return hardhat_proc, sifnoded_proc, relayer0_proc, witness0_proc
+        return hardhat_proc, sifnoded_proc, relayer0_proc, witness_proc
 
     def init_smart_contracts(self, w3_url, operator_account, deployed_contract_addresses):
         # TODO Looks like this is already done somewhere else...
@@ -933,7 +936,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
     ) -> Tuple[str, command.ExecArgs, subprocess.Popen, str, cosmos.Address, List, List, List, str, str]:
         validator_count = 1
         relayer_count = 1
-        witness_count = 1
+        witness_count = 2
         # TODO Not used
         # rpc_port = 9000
 
@@ -1060,11 +1063,6 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         sifnode_relayer0_address = sifnode_relayer0["address"]
         sifnode_relayer0_home = sifnode_relayer0["home"]
 
-        sifnode_witness0 = exactly_one(sifnode_witnesses)
-        sifnode_witness0_mnemonic = sifnode_witness0["name"]
-        sifnode_witness0_address = sifnode_witness0["address"]
-        sifnode_witness0_home = sifnode_witness0["home"]
-
         bridge_registry_contract_addr = peggy_sc_addrs["BridgeRegistry"]
 
         self.cmd.wait_for_sif_account_up(sifnode_validator0_address, tcp_url=tcp_url)  # Required for both relayer and witness
@@ -1089,26 +1087,29 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             home=sifnode_relayer0_home,
         )
 
-        witness0_exec_args = ebrelayer.peggy2_build_ebrelayer_cmd(
-            "init-witness",
-            hardhat_chain_id,
-            tcp_url,
-            web3_websocket_address,
-            bridge_registry_contract_addr,
-            sifnode_witness0_mnemonic,
-            chain_id=chain_id,
-            node=tcp_url,
-            sign_with=sifnode_witness0_address,
-            symbol_translator_file=symbol_translator_file,
-            ethereum_address=evm_validator0_addr,
-            ethereum_private_key=evm_validator0_key,
-            keyring_backend="test",
-            keyring_dir=sifnode_relayer0_home,
-            log_format="json",
-            home=sifnode_witness0_home,
-        )
+        witness_exec_args = []
+        for w in sifnode_witnesses:
+            item = ebrelayer.peggy2_build_ebrelayer_cmd(
+                "init-witness",
+                hardhat_chain_id,
+                tcp_url,
+                web3_websocket_address,
+                bridge_registry_contract_addr,
+                w["name"],
+                chain_id=chain_id,
+                node=tcp_url,
+                sign_with=w["address"],
+                symbol_translator_file=symbol_translator_file,
+                ethereum_address=evm_validator0_addr,
+                ethereum_private_key=evm_validator0_key,
+                keyring_backend="test",
+                keyring_dir=sifnode_relayer0_home,
+                log_format="json",
+                home=w["home"],
+            )
+            witness_exec_args.append(item)
 
-        return [relayer0_exec_args], [witness0_exec_args]
+        return [relayer0_exec_args], [witness_exec_args]
 
     def write_env_files(self, project_dir, go_bin_dir, evm_smart_contract_addrs, eth_accounts, admin_account_name,
         admin_account_address, sifnode_validator0_home, sifnode_validators, sifnode_relayers, sifnode_witnesses,
@@ -1398,7 +1399,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                     {}))
 
         intellij_ebrelayer_config = exactly_one(intellij_ebrelayer_configs)
-        intellij_witness_config = exactly_one(intellij_witness_configs)
+        intellij_witness_config = intellij_witness_configs[0]
         intellij_sifnoded_config = exactly_one(intellij_sifnoded_configs)
 
         run_dir = self.project.project_dir(".run")

@@ -195,7 +195,6 @@ func (sub CosmosSub) ProcessLockBurnWithScope(txFactory tx.Factory, client *tmcl
 		}
 
 		for _, txLog := range block.TxsResults {
-			sub.SugaredLogger.Infow("block.TxsResults: ", "block.TxsResults: ", block.TxsResults)
 			for _, event := range txLog.Events {
 
 				claimType := getOracleClaimType(event.GetType())
