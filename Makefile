@@ -23,6 +23,12 @@ BUILD_FLAGS := -ldflags '$(ldflags)' -tags ${BUILD_TAGS}
 
 BINARIES=./cmd/sifnoded ./cmd/sifgen ./cmd/ebrelayer
 
+# You can regenerate Makefile.protofiles with
+#     find . -name *.proto | sort | grep -v node_mo | paste -s -d " " > Makefile.protofiles
+# if the list of .proto files changes
+proto_files=proto/sifnode/clp/v1/genesis.proto proto/sifnode/clp/v1/params.proto proto/sifnode/clp/v1/querier.proto proto/sifnode/clp/v1/tx.proto proto/sifnode/clp/v1/types.proto proto/sifnode/dispensation/v1/query.proto proto/sifnode/dispensation/v1/tx.proto proto/sifnode/dispensation/v1/types.proto proto/sifnode/ethbridge/v1/query.proto proto/sifnode/ethbridge/v1/tx.proto proto/sifnode/ethbridge/v1/types.proto proto/sifnode/oracle/v1/network_descriptor.proto proto/sifnode/oracle/v1/types.proto proto/sifnode/tokenregistry/v1/query.proto proto/sifnode/tokenregistry/v1/tx.proto proto/sifnode/tokenregistry/v1/types.proto third_party/proto/cosmos/base/coin.proto third_party/proto/cosmos/base/query/v1beta1/pagination.proto third_party/proto/gogoproto/gogo.proto third_party/proto/google/api/annotations.proto third_party/proto/google/api/httpbody.proto third_party/proto/google/api/http.proto
+go_proto_files=x/ethbridge/types/types.pb.go x/ethbridge/types/tx.pb.go x/ethbridge/types/query.pb.go x/oracle/types/types.pb.go x/oracle/types/network_descriptor.pb.go x/dispensation/types/types.pb.go x/dispensation/types/tx.pb.go x/dispensation/types/query.pb.go x/clp/types/types.pb.go x/clp/types/tx.pb.go x/clp/types/params.pb.go x/clp/types/genesis.pb.go x/clp/types/querier.pb.go x/tokenregistry/types/types.pb.go x/tokenregistry/types/tx.pb.go x/tokenregistry/types/query.pb.go
+
 all: lint install
 
 build-config:
@@ -45,7 +51,7 @@ lint: lint-pre
 lint-verbose: lint-pre
 	@golangci-lint run -v --timeout=5m
 
-install: go.sum ${smart_contract_file} .proto-gen
+install: go.sum ${smart_contract_file} $(go_proto_files)
 	go install ${BUILD_FLAGS} ${BINARIES}
 
 install-bin: go.sum
@@ -104,18 +110,11 @@ rollback:
 ###                                Protobuf                                 ###
 ###############################################################################
 
-# You can regenerate Makefile.protofiles with
-#     find . -name *.proto | sort | grep -v node_mo | paste -s -d " " > Makefile.protofiles
-# if the list of .proto files changes
-proto_files=$(file <Makefile.protofiles)
+proto-all: proto-format proto-lint $(go_proto_files)
 
-proto-all: proto-format proto-lint .proto-gen
-
-.proto-gen: $(proto_files)
+$(go_proto_files) &: $(proto_files)
 	@echo ${DOCKER}
 	$(DOCKER) run -e SIFUSER=$(shell id -u):$(shell id -g) --rm -v $(CURDIR):/workspace --workdir /workspace tendermintdev/sdk-proto-gen:v0.3 sh -x ./scripts/protocgen.sh
-	touch $@
-.PHONY: .proto-gen
 
 proto-format:
 	@echo "Formatting Protobuf files"
