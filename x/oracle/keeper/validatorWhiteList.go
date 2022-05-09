@@ -1,8 +1,10 @@
 package keeper
 
 import (
+	"github.com/Sifchain/sifnode/x/instrumentation"
 	"github.com/Sifchain/sifnode/x/oracle/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"go.uber.org/zap"
 )
 
 // GetAllWhiteList get the validators for all networks.
@@ -28,6 +30,9 @@ func (k Keeper) SetOracleWhiteList(ctx sdk.Context, networkDescriptor types.Netw
 	store := ctx.KVStore(k.storeKey)
 	key := networkDescriptor.GetPrefix()
 	store.Set(key, k.cdc.MustMarshal(&validatorList))
+	instrumentation.PeggyCheckpoint(ctx.Logger(), "SetOracleWhiteList",
+		"validatorList", zap.Reflect("validatorList", validatorList),
+	)
 }
 
 // RemoveOracleWhiteList remove the validator list for a network.

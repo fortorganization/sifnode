@@ -82,9 +82,9 @@ func InitRelayConfig(
 }
 
 type BatchUnit struct {
+	prophecyId         [][32]byte
 	batchClaimData     []cosmosbridge.CosmosBridgeClaimData
 	batchSignatureData [][]cosmosbridge.CosmosBridgeSignatureData
-	batchID            [][32]byte
 }
 
 type SignatureUnit struct {
@@ -144,19 +144,19 @@ func buildBatchClaim(batchProphecyInfo []*oracletypes.ProphecyInfo) BatchUnit {
 	batchLen := len(batchProphecyInfo)
 	batchClaimData := make([]cosmosbridge.CosmosBridgeClaimData, batchLen)
 	batchSignatureData := make([][]cosmosbridge.CosmosBridgeSignatureData, batchLen)
-	batchID := make([][32]byte, batchLen)
+	prophecyID := make([][32]byte, batchLen)
 
 	for index, prophecyInfo := range batchProphecyInfo {
 		sUnit := prophecyInfoToSignatureUnit(prophecyInfo)
 		batchClaimData[index] = sUnit.claimData
 		batchSignatureData[index] = sUnit.signatureData
-		batchID[index] = sUnit.prophecyId
+		prophecyID[index] = sUnit.prophecyId
 	}
 
 	return BatchUnit{
 		batchClaimData:     batchClaimData,
 		batchSignatureData: batchSignatureData,
-		batchID:            batchID,
+		prophecyId:         prophecyID,
 	}
 }
 
@@ -177,9 +177,14 @@ func RelayBatchProphecyCompletedToEthereum(
 
 	batch := buildBatchClaim(batchProphecyInfo)
 
+	sugaredLogger.Errorw(
+		"buildBatchClaim",
+		"batch", batch,
+	)
+
 	tx, err := cosmosBridgeInstance.BatchSubmitProphecyClaimAggregatedSigs(
 		auth,
-		batch.batchID,
+		batch.prophecyId,
 		batch.batchClaimData,
 		batch.batchSignatureData,
 	)
@@ -187,7 +192,7 @@ func RelayBatchProphecyCompletedToEthereum(
 	if err != nil {
 		sugaredLogger.Errorw(
 			"cosmosBridgeInstance.BatchSubmitProphecyClaimAggregatedSigs",
-			"batchID", batch.batchID,
+			"prophecyId", batch.prophecyId,
 			"batchClaimData", batch.batchClaimData,
 			"batchSignatureData", batch.batchSignatureData,
 			errorMessageKey, err,

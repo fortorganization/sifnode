@@ -5,6 +5,7 @@ import "./Oracle.sol";
 import "./BridgeBank/BridgeBank.sol";
 import "./CosmosBridgeStorage.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "hardhat/console.sol";
 
 
 /**
@@ -200,7 +201,7 @@ contract CosmosBridge is CosmosBridgeStorage, Oracle {
       );
 
       unchecked {
-        pow += getValidatorPower(validator.signer); 
+        pow += getValidatorPower(validator.signer);
       }
 
       for (uint256 j = i + 1; j < validatorLength;) {
@@ -251,6 +252,9 @@ contract CosmosBridge is CosmosBridgeStorage, Oracle {
     ClaimData[] calldata claims,
     SignatureData[][] calldata signatureData
   ) external {
+    console.log("sigsLength ", sigs.length);
+    console.log("claimLength ", claims.length);
+    console.log("sigsLength ", signatureData.length);
     uint256 sigsLength = sigs.length;
     uint256 claimLength = claims.length;
     require(sigsLength == claimLength, "INV_CLM_LEN");
@@ -308,7 +312,8 @@ contract CosmosBridge is CosmosBridgeStorage, Oracle {
     require(uint256(hashDigest) == prophecyID, "INV_DATA");
 
     // ensure signature lengths are correct
-    require(signatureData.length > 0 && signatureData.length <= validatorCount, "INV_SIG_LEN");
+    require(signatureData.length > 0, "INV_SIG_LEN0");
+    require(signatureData.length <= validatorCount, "INV_SIG_VAL");
 
     // ensure the networkDescriptor matches
     if (!claimData.bridgeToken) {

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Sifchain/sifnode/x/instrumentation"
 
 	"github.com/Sifchain/sifnode/x/oracle/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -33,6 +34,9 @@ func (k Keeper) GetConsensusNeeded(ctx sdk.Context, networkIdentity types.Networ
 
 	bz := store.Get(key)
 	consensusNeeded := binary.BigEndian.Uint32(bz)
+
+	instrumentation.PeggyCheckpoint(ctx.Logger(), "GetConsensusNeeded", "consensus", consensusNeeded)
+
 	if consensusNeeded > 100 {
 		return 0, errors.New("consensusNeeded stored is too large")
 	}

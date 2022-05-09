@@ -78,6 +78,7 @@ export class CosmosBridgeProxy {
   ) {
     this.contract = sifchainContractFactories.cosmosBridge.then(async (cosmosBridgeFactory) => {
       const args = await cosmosBridgeArgumentsPromise.cosmosBridgeArguments
+      console.error("use these arguments for cosmosbridge: " + JSON.stringify(args))
       const cosmosBridgeProxy = await hardhatRuntimeEnvironment.upgrades.deployProxy(
         cosmosBridgeFactory,
         args.asArray(),

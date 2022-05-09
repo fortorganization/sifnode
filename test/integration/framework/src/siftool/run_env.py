@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from typing import List, Tuple, TextIO, Any
@@ -134,7 +135,7 @@ class Integrator(Ganache, Command):
 
         # This was deleted in commit f00242302dd226bc9c3060fb78b3de771e3ff429 from sifchain_start_daemon.sh because
         # it was not working. But we assume that we want to keep it.
-        sifnode.sifnoded_exec(["add-genesis-validators", valoper], sifnoded_home=sifnode.home)
+        sifnode.sifnoded_exec(["add-genesis-validators", valoper], sifnoded_home=sifnoded_home)
 
         adminuser_addr = self.sifchain_init_common(sifnode, denom_whitelist_file)
         return adminuser_addr
@@ -774,6 +775,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
     def __init__(self, cmd: Command):
         super().__init__(cmd)
         self.hardhat = hardhat.Hardhat(cmd)
+        self.witness_count = int(os.getenv("WITNESS_COUNT", 2))
+        self.consensus_threshold = int(os.getenv("CONSENSUS_THRESHOLD", 49))
+        self.witness_power = 100
 
     # Destuctures a linear array of EVM accounts into:
     # [operator, owner, pauser, [validator-0, validator-1, ...], [...available...]]
@@ -820,7 +824,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
 
         # This determines how many EVM accounts we want to allocate for validators.
         # Since every validator needs on EVM account, this should be equal to the number of validators (possibly more).
-        hardhat_validator_count = 1
+        hardhat_validator_count = self.witness_count
         hardhat_network_id = 1  # Not used in smart-contracts/src/devenv/hardhatNode.ts
         # This value is actually returned from HardhatNodeRunner. It comes from smart-contracts/hardhat.config.ts.
         # In Typescript, its value is obtained by 'require("hardhat").hre.network.config.chainId'.
@@ -849,7 +853,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             [999999 * 10**21, ceth_symbol],
             [137 * 10**16, "sifBridge00030x1111111111111111111111111111111111111111"],
         ]
-        validator_power = 100
+        validator_power = self.witness_power
         seed_ip_address = "10.10.1.1"
         tendermint_port = 26657
         denom_whitelist_file = project_dir("test", "integration", "whitelisted-denoms.json")
@@ -934,9 +938,9 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         denom_whitelist_file: str, admin_account_mint_amounts: cosmos.LegacyBalance, registry_json: str,
         admin_account_name: str, ceth_symbol: str
     ) -> Tuple[str, command.ExecArgs, subprocess.Popen, str, cosmos.Address, List, List, List, str, str]:
-        validator_count = 1
+        validator_count = self.witness_count
         relayer_count = 1
-        witness_count = 2
+        witness_count = self.witness_count
         # TODO Not used
         # rpc_port = 9000
 
@@ -979,12 +983,12 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             self.cmd.sifnoded_peggy2_init_validator(sifnode, validator_moniker, validator_mnemonic, evm_network_descriptor, validator_power, chain_dir_base)
 
         # TODO Needs to be fixed when we support more than 1 validator
-        validator0 = exactly_one(validators)
+        validator0 = validators[0]
         validator0_home = os.path.join(chain_dir_base, validator0["moniker"], ".sifnoded")
         validator0_address = validator0["address"]
         chain_dir = os.path.join(chain_dir_base, validator0["moniker"])
 
-        sifnode = Sifnoded(self.cmd, home=validator0_home)
+        sifnode = Sifnoded(self.cmd, home=sifnoded_home)
 
         # Create an ADMIN account on sifnode with name admin_account_name (e.g. "sifnodeadmin")
         admin_account_address = sifnode.peggy2_add_account(admin_account_name, admin_account_mint_amounts, is_admin=True)
@@ -1044,7 +1048,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         # We need wait for last tx wrapped up in block, otherwise we could get a wrong sequence, resulting in invalid
         # signatures. This delay waits for block production. (See commit 5854d8b6f3970c1254cac0eca0e3817354151853)
         sifnode.wait_for_last_transaction_to_be_mined()
-        sifnode.peggy2_update_consensus_needed(admin_account_address, hardhat_chain_id, chain_id)
+        sifnode.peggy2_update_consensus_needed(admin_account_address, hardhat_chain_id, chain_id, self.consensus_threshold)
 
         return network_config_file, sifnoded_exec_args, sifnoded_proc, tcp_url, admin_account_address, validators, \
             relayers, witnesses, validator0_home, chain_dir
@@ -1084,7 +1088,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
             ethereum_private_key=evm_validator0_key,
             keyring_backend="test",
             keyring_dir=sifnode_relayer0_home,
-            home=sifnode_relayer0_home,
+            home=sifnoded_home,
         )
 
         witness_exec_args = []
@@ -1105,7 +1109,7 @@ class Peggy2Environment(IntegrationTestsEnvironment):
                 keyring_backend="test",
                 keyring_dir=sifnode_relayer0_home,
                 log_format="json",
-                home=w["home"],
+                home=sifnoded_home,
             )
             witness_exec_args.append(item)
 
@@ -1231,6 +1235,18 @@ class Peggy2Environment(IntegrationTestsEnvironment):
         launch_json = {
             "version": "0.2.0",
             "configurations": [
+                {
+                "name": "Python: siftool",
+                "type": "python",
+                "request": "launch",
+                "program": "${workspaceFolder}/test/integration/framework/siftool",
+                "args": ["run-env"],
+                "console": "integratedTerminal",
+                "justMyCode": True,
+                "env": {
+                    "WITNESS_COUNT": "1"
+                }
+                },
                 {
                     "runtimeArgs": ["node_modules/.bin/hardhat", "run"],
                     "cwd": "${workspaceFolder}/smart-contracts",
